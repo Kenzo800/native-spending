@@ -1,10 +1,11 @@
+import { MaterialIcons } from "@expo/vector-icons";
 import { DrawerContentScrollView } from "@react-navigation/drawer";
 import { useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import { StatusBar } from "expo-status-bar";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Texts } from "../constants/Texts";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
-
 interface DrawerContentProps {
   navigation: {
     closeDrawer: () => void;
@@ -16,14 +17,20 @@ function CustomDrawerContent(props: DrawerContentProps) {
   const router = useRouter();
 
   return (
-    <DrawerContentScrollView
+    <View
       style={[styles.drawerContainer, { backgroundColor: colors.background }]}
     >
-      <View style={styles.drawerHeader}>
-        <Text style={[styles.drawerTitle, { color: colors.text }]}>記帳本</Text>
-      </View>
+      <DrawerContentScrollView style={styles.drawerScrollView}>
+        <View style={styles.drawerHeader}>
+          <Text style={[styles.drawerTitle, { color: colors.text }]}>
+            {Texts.app.name}
+          </Text>
+        </View>
 
-      <View style={styles.drawerContent}>{/* 這裡可以添加其他抽屜項目 */}</View>
+        <View style={styles.drawerContent}>
+          {/* 這裡可以添加其他抽屜項目 */}
+        </View>
+      </DrawerContentScrollView>
 
       <View style={styles.drawerFooter}>
         <TouchableOpacity
@@ -33,12 +40,19 @@ function CustomDrawerContent(props: DrawerContentProps) {
             router.push("/settings");
           }}
         >
-          <Text style={[styles.settingsText, { color: colors.text }]}>
-            ⚙️ 設定
-          </Text>
+          <View style={styles.settingsContent}>
+            <MaterialIcons
+              name="settings"
+              size={20}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={[styles.settingsText, { color: colors.text }]}>
+              設定
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
-    </DrawerContentScrollView>
+    </View>
   );
 }
 
@@ -89,6 +103,9 @@ const styles = StyleSheet.create({
   drawerContainer: {
     flex: 1,
   },
+  drawerScrollView: {
+    flex: 1,
+  },
   drawerHeader: {
     padding: 20,
     borderBottomWidth: 1,
@@ -109,7 +126,11 @@ const styles = StyleSheet.create({
   settingsButton: {
     padding: 15,
     borderRadius: 8,
+  },
+  settingsContent: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
   },
   settingsText: {
     fontSize: 16,

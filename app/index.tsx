@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DrawerActions } from "@react-navigation/native";
-import { useNavigation, useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -12,8 +12,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Texts } from "../constants/Texts";
 import { useTheme } from "./context/ThemeContext";
-
 interface Transaction {
   id: string;
   date: string;
@@ -24,7 +24,6 @@ interface Transaction {
 }
 
 export default function HomeScreen() {
-  const router = useRouter();
   const navigation = useNavigation();
   const { colors } = useTheme();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -106,7 +105,9 @@ export default function HomeScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>記帳本</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          {Texts.app.name}
+        </Text>
         <TouchableOpacity
           style={styles.menuButton}
           onPress={() => {

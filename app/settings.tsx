@@ -2,8 +2,8 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Texts } from "../constants/Texts";
 import { useTheme } from "./context/ThemeContext";
-
 export default function SettingsScreen() {
   const router = useRouter();
   const { themeMode, setThemeMode, colors } = useTheme();
@@ -72,8 +72,9 @@ export default function SettingsScreen() {
       <View style={[styles.section, { backgroundColor: colors.card }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>關於</Text>
         <Text style={[styles.aboutText, { color: colors.textSecondary }]}>
-          記帳本 v1.0.0{"\n"}
-          一個簡單的記帳應用程式
+          {Texts.app.name} {Texts.app.version}
+          {"\n"}
+          {Texts.app.description}
         </Text>
       </View>
     </SafeAreaView>
