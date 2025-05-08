@@ -125,9 +125,6 @@ export default function HomeScreen() {
         <Text style={[styles.summaryText, { color: colors.text }]}>
           支出: ${totalExpense.toFixed(2)}
         </Text>
-        <Text style={[styles.summaryText, { color: colors.text }]}>
-          結餘: ${(totalIncome - totalExpense).toFixed(2)}
-        </Text>
       </View>
 
       <View style={[styles.form, { backgroundColor: colors.card }]}>
