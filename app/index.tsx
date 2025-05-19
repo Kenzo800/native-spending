@@ -36,12 +36,22 @@ const TransactionItem = ({
   transaction,
   onDelete,
   colors,
+  isOpen,
+  onSwipeableOpen,
 }: {
   transaction: Transaction;
   onDelete: (id: number) => void;
   colors: any;
+  isOpen: boolean;
+  onSwipeableOpen: (id: number) => void;
 }) => {
   const swipeableRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!isOpen && swipeableRef.current) {
+      swipeableRef.current.close();
+    }
+  }, [isOpen]);
 
   const renderRightActions = () => {
     return (
@@ -64,11 +74,7 @@ const TransactionItem = ({
       overshootRight={false}
       friction={2}
       enableTrackpadTwoFingerGesture
-      onSwipeableOpen={() => {
-        if (swipeableRef.current) {
-          swipeableRef.current.close();
-        }
-      }}
+      onSwipeableOpen={() => onSwipeableOpen(transaction.id)}
     >
       <Animated.View
         style={[
@@ -126,6 +132,9 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [openTransactionId, setOpenTransactionId] = useState<number | null>(
+    null
+  );
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -400,6 +409,8 @@ export default function HomeScreen() {
             transaction={transaction}
             onDelete={deleteTransaction}
             colors={colors}
+            isOpen={openTransactionId === transaction.id}
+            onSwipeableOpen={(id) => setOpenTransactionId(id)}
           />
         ))}
       </ScrollView>
