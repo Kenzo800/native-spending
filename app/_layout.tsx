@@ -1,138 +1,118 @@
-import { MaterialIcons } from "@expo/vector-icons";
-import { DrawerContentScrollView } from "@react-navigation/drawer";
-import { useRouter } from "expo-router";
-import { Drawer } from "expo-router/drawer";
-import { StatusBar } from "expo-status-bar";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Texts } from "../constants/Texts";
-import { ThemeProvider, useTheme } from "./context/ThemeContext";
-interface DrawerContentProps {
-  navigation: {
-    closeDrawer: () => void;
-  };
-}
+import { Ionicons } from '@expo/vector-icons';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { StatusBar } from 'expo-status-bar';
+import React from 'react';
+import { Platform } from 'react-native';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function CustomDrawerContent(props: DrawerContentProps) {
-  const { colors } = useTheme();
-  const router = useRouter();
+import { AppProvider } from './context/AppContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
+
+// Import screens
+import HomeScreen from './index';
+import SettingsScreen from './settings';
+import StatisticsScreen from './statistics';
+import TransactionsScreen from './transactions';
+
+const Tab = createBottomTabNavigator();
+
+function TabNavigator() {
+  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  // Calculate the appropriate tab bar height and padding based on safe area
+  const tabBarHeight = Platform.OS === 'ios' ? 60 + insets.bottom : 60;
+  const tabBarPaddingBottom = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 8;
 
   return (
-    <View
-      style={[styles.drawerContainer, { backgroundColor: colors.background }]}
+    <SafeAreaView 
+      style={{ flex: 1, backgroundColor: colors.background }}
+      edges={['top']} // 只處理頂部安全區域，底部由 tab bar 處理
     >
-      <DrawerContentScrollView style={styles.drawerScrollView}>
-        <View style={styles.drawerHeader}>
-          <Text style={[styles.drawerTitle, { color: colors.text }]}>
-            {Texts.app.name}
-          </Text>
-        </View>
-
-        <View style={styles.drawerContent}>
-          {/* 這裡可以添加其他抽屜項目 */}
-        </View>
-      </DrawerContentScrollView>
-
-      <View style={styles.drawerFooter}>
-        <TouchableOpacity
-          style={[styles.settingsButton, { backgroundColor: colors.card }]}
-          onPress={() => {
-            props.navigation.closeDrawer();
-            router.push("/settings");
-          }}
-        >
-          <View style={styles.settingsContent}>
-            <MaterialIcons
-              name="settings"
-              size={20}
-              style={{ marginRight: 8 }}
-            />
-            <Text style={[styles.settingsText, { color: colors.text }]}>
-              設定
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function RootLayoutNav() {
-  const { colors } = useTheme();
-
-  return (
-    <Drawer
-      screenOptions={{
+      <Tab.Navigator
+      screenOptions={({ route }) => ({
         headerShown: false,
-        drawerPosition: "right",
-        drawerType: "front",
-        drawerStyle: {
-          backgroundColor: colors.background,
-          width: "70%",
+        // 禁用屏幕轉換動畫以減少閃爍
+        animationEnabled: false,
+        // 設置屏幕選項以提高性能
+        lazy: false,
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName: string;
+
+          if (route.name === 'Home') {
+            iconName = focused ? 'home' : 'home-outline';
+          } else if (route.name === 'Transactions') {
+            iconName = focused ? 'list' : 'list-outline';
+          } else if (route.name === 'Statistics') {
+            iconName = focused ? 'analytics' : 'analytics-outline';
+          } else if (route.name === 'Settings') {
+            iconName = focused ? 'settings' : 'settings-outline';
+          } else {
+            iconName = 'circle';
+          }
+
+          return <Ionicons name={iconName as any} size={size} color={color} />;
         },
-        swipeEnabled: true,
-        swipeEdgeWidth: 50,
-      }}
-      drawerContent={(props) => <CustomDrawerContent {...props} />}
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: tabBarHeight,
+          paddingBottom: tabBarPaddingBottom,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '500',
+        },
+      })}
+      // 添加 initialRouteName 確保首次載入一致性
+      initialRouteName="Home"
     >
-      <Drawer.Screen
-        name="index"
+      <Tab.Screen 
+        name="Home" 
+        component={HomeScreen}
         options={{
-          drawerLabel: () => null,
+          tabBarLabel: '首頁',
         }}
       />
-      <Drawer.Screen
-        name="settings"
+      <Tab.Screen 
+        name="Transactions" 
+        component={TransactionsScreen}
         options={{
-          drawerLabel: () => null,
+          tabBarLabel: '記錄',
         }}
       />
-    </Drawer>
+      <Tab.Screen 
+        name="Statistics" 
+        component={StatisticsScreen}
+        options={{
+          tabBarLabel: '統計',
+        }}
+      />
+      <Tab.Screen 
+        name="Settings" 
+        component={SettingsScreen}
+        options={{
+          tabBarLabel: '設定',
+        }}
+      />
+    </Tab.Navigator>
+    </SafeAreaView>
   );
 }
 
 export default function Layout() {
   return (
-    <ThemeProvider>
-      <RootLayoutNav />
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppProvider>
+          <TabNavigator />
+          <StatusBar style="auto" />
+        </AppProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  drawerContainer: {
-    flex: 1,
-  },
-  drawerScrollView: {
-    flex: 1,
-  },
-  drawerHeader: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  drawerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  drawerContent: {
-    flex: 1,
-  },
-  drawerFooter: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#ccc",
-  },
-  settingsButton: {
-    padding: 15,
-    borderRadius: 8,
-  },
-  settingsContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  settingsText: {
-    fontSize: 16,
-  },
-});

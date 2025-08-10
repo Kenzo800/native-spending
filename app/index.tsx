@@ -1,420 +1,273 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
-import { DrawerActions } from "@react-navigation/native";
-import { useNavigation } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
-} from "react-native";
-import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import Animated from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Texts } from "../constants/Texts";
-import { useTheme } from "./context/ThemeContext";
+} from 'react-native';
 
-interface Transaction {
-  id: number;
-  amount: number;
-  description: string;
-  category: string;
-  type: "income" | "expense";
-  date: string;
-  created_at: string;
-  updated_at: string;
-}
 
-const TransactionItem = ({
-  transaction,
-  onDelete,
-  colors,
-  isOpen,
-  onSwipeableOpen,
-}: {
-  transaction: Transaction;
-  onDelete: (id: number) => void;
-  colors: any;
-  isOpen: boolean;
-  onSwipeableOpen: (id: number) => void;
-}) => {
-  const swipeableRef = useRef<any>(null);
+import { PieChart } from '../components/charts/PieChart';
+import { HomeScreenSkeleton } from '../components/skeletons/HomeScreenSkeleton';
+import { AddTransactionModal } from '../components/transaction/AddTransactionModal';
+import { TransactionItem } from '../components/transaction/TransactionItem';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Transaction } from '../types';
+import { useApp } from './context/AppContext';
+import { useTheme } from './context/ThemeContext';
 
-  useEffect(() => {
-    if (!isOpen && swipeableRef.current) {
-      swipeableRef.current.close();
+import { CHART_COLORS } from '../constants/DefaultData';
+import {
+  calculateBalance,
+  calculateTotalExpense,
+  calculateTotalIncome,
+  formatCurrency,
+  getExpensesByCategory
+} from '../utils/calculations';
+
+export default function HomeScreen() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  const { 
+    transactions, 
+    categories, 
+    isLoading, 
+    refreshData, 
+    deleteTransaction 
+  } = useApp();
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | undefined>(undefined);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Calculate current month data
+  const currentMonth = new Date();
+  const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+  const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+  const monthPeriod = { start: startOfMonth, end: endOfMonth };
+
+  const monthlyIncome = calculateTotalIncome(transactions, monthPeriod);
+  const monthlyExpense = calculateTotalExpense(transactions, monthPeriod);
+  const monthlyBalance = calculateBalance(transactions, monthPeriod);
+
+  const totalBalance = calculateBalance(transactions);
+
+  // Get recent transactions
+  const recentTransactions = useMemo(() => {
+    return transactions
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 10);
+  }, [transactions]);
+
+  // Get expense chart data
+  const expenseChartData = useMemo(() => {
+    const expensesByCategory = getExpensesByCategory(transactions, monthPeriod);
+    const total = expensesByCategory.reduce((sum, item) => sum + item.amount, 0);
+    
+    if (total === 0) return [];
+
+    return expensesByCategory.map((item, index) => {
+      const category = categories.find(cat => cat.id === item.category);
+      return {
+        name: category?.name || item.category,
+        value: item.amount,
+        color: category?.color || CHART_COLORS[index % CHART_COLORS.length],
+        percentage: (item.amount / total) * 100,
+      };
+    }).slice(0, 6); // Show top 6 categories
+  }, [transactions, categories, monthPeriod]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshData();
+    } finally {
+      setRefreshing(false);
     }
-  }, [isOpen]);
+  };
 
-  const renderRightActions = () => {
-    return (
-      <Animated.View style={styles.deleteAction}>
-        <TouchableOpacity
-          style={styles.deleteActionContent}
-          onPress={() => onDelete(transaction.id)}
-        >
-          <Text style={styles.deleteActionText}>刪除</Text>
-        </TouchableOpacity>
-      </Animated.View>
+  const handleTransactionPress = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    setShowAddModal(true);
+  };
+
+  const handleDeleteTransaction = (transactionId: string) => {
+    Alert.alert(
+      '確認刪除',
+      '確定要刪除這筆交易嗎？',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '刪除',
+          style: 'destructive',
+          onPress: () => deleteTransaction(transactionId),
+        },
+      ]
     );
   };
 
+  const closeModal = () => {
+    setShowAddModal(false);
+    setSelectedTransaction(undefined);
+  };
+
+  // 如果正在載入，顯示骨架屏
+  if (isLoading) {
+    return <HomeScreenSkeleton />;
+  }
+
   return (
-    <Swipeable
-      ref={swipeableRef}
-      renderRightActions={renderRightActions}
-      rightThreshold={40}
-      overshootRight={false}
-      friction={2}
-      enableTrackpadTwoFingerGesture
-      onSwipeableOpen={() => onSwipeableOpen(transaction.id)}
-    >
-      <Animated.View
-        style={[
-          styles.transactionItem,
-          {
-            backgroundColor: colors.card,
-            borderBottomColor: colors.border,
-          },
-        ]}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
-        <View style={styles.transactionLeft}>
-          <View style={styles.transactionHeader}>
-            <Text
-              style={[styles.transactionDescription, { color: colors.text }]}
-            >
-              {transaction.description}
-            </Text>
-            <Text
-              style={[
-                styles.transactionAmount,
-                {
-                  color:
-                    transaction.type === "income"
-                      ? colors.income
-                      : colors.expense,
-                },
-              ]}
-            >
-              {transaction.type === "income" ? "+" : "-"}$
-              {transaction.amount.toFixed(2)}
-            </Text>
-          </View>
-          <View style={styles.transactionDetails}>
-            <Text
-              style={[
-                styles.transactionCategory,
-                { color: colors.textSecondary },
-              ]}
-            >
-              {transaction.category}
-            </Text>
-            <Text
-              style={[styles.transactionDate, { color: colors.textSecondary }]}
-            >
-              {new Date(transaction.date).toLocaleDateString("zh-TW")}
-            </Text>
-          </View>
-        </View>
-      </Animated.View>
-    </Swipeable>
-  );
-};
-
-export default function HomeScreen() {
-  const navigation = useNavigation();
-  const { colors } = useTheme();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [openTransactionId, setOpenTransactionId] = useState<number | null>(
-    null
-  );
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("");
-  const [type, setType] = useState<"income" | "expense">("expense");
-  const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [tempDate, setTempDate] = useState(new Date());
-
-  useEffect(() => {
-    loadTransactions();
-  }, []);
-
-  const loadTransactions = async () => {
-    try {
-      const savedTransactions = await AsyncStorage.getItem("transactions");
-      if (savedTransactions) {
-        setTransactions(JSON.parse(savedTransactions));
-      }
-    } catch (error) {
-      Alert.alert("錯誤", "無法載入交易記錄");
-    }
-  };
-
-  const saveTransactions = async (newTransactions: Transaction[]) => {
-    try {
-      await AsyncStorage.setItem(
-        "transactions",
-        JSON.stringify(newTransactions)
-      );
-      setTransactions(newTransactions);
-    } catch (error) {
-      Alert.alert("錯誤", "無法儲存交易記錄");
-    }
-  };
-
-  const addTransaction = async () => {
-    if (!amount || !description || !category) {
-      Alert.alert("錯誤", "請填寫所有欄位");
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const newTransaction: Transaction = {
-      id: Date.now(),
-      date: date.toISOString(),
-      type,
-      category,
-      amount: parseFloat(amount),
-      description,
-      created_at: now,
-      updated_at: now,
-    };
-
-    try {
-      await saveTransactions([...transactions, newTransaction]);
-      setAmount("");
-      setDescription("");
-      setCategory("");
-      setDate(new Date());
-    } catch (error) {
-      Alert.alert("錯誤", "無法新增交易記錄");
-    }
-  };
-
-  const deleteTransaction = async (id: number) => {
-    try {
-      const updatedTransactions = transactions.filter((t) => t.id !== id);
-      await saveTransactions(updatedTransactions);
-    } catch (error) {
-      Alert.alert("錯誤", "無法刪除交易記錄");
-    }
-  };
-
-  const totalIncome = transactions
-    .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalExpense = transactions
-    .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const handleDateChange = (
-    event: DateTimePickerEvent,
-    selectedDate?: Date
-  ) => {
-    if (selectedDate) {
-      setTempDate(selectedDate);
-    }
-  };
-
-  const handleConfirmDate = () => {
-    setDate(tempDate);
-    setShowDatePicker(false);
-  };
-
-  const handleCancelDate = () => {
-    setTempDate(date);
-    setShowDatePicker(false);
-  };
-
-  return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-    >
+        {/* Header */}
       <View style={styles.header}>
+          <View>
+            <Text style={[styles.greeting, { color: colors.textSecondary }]}>
+              您好！
+            </Text>
         <Text style={[styles.title, { color: colors.text }]}>
-          {Texts.app.name}
+              財務概覽
         </Text>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => {
-            navigation.dispatch(DrawerActions.openDrawer());
-          }}
-        >
-          <Text style={[styles.menuButtonText, { color: colors.text }]}>☰</Text>
-        </TouchableOpacity>
+          </View>
       </View>
 
-      <View style={[styles.summary, { backgroundColor: colors.card }]}>
-        <Text style={[styles.summaryText, { color: colors.text }]}>
-          收入: ${totalIncome.toFixed(2)}
+        {/* Balance Card */}
+        <Card style={styles.balanceCard}>
+          <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>
+            總餘額
         </Text>
-        <Text style={[styles.summaryText, { color: colors.text }]}>
-          支出: ${totalExpense.toFixed(2)}
-        </Text>
-      </View>
-
-      <View style={[styles.form, { backgroundColor: colors.card }]}>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.background,
-              color: colors.text,
-              borderColor: colors.border,
-            },
-          ]}
-          placeholder="金額"
-          placeholderTextColor={colors.textSecondary}
-          value={amount}
-          onChangeText={setAmount}
-          keyboardType="numeric"
-        />
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.background,
-              color: colors.text,
-              borderColor: colors.border,
-            },
-          ]}
-          placeholder="描述"
-          placeholderTextColor={colors.textSecondary}
-          value={description}
-          onChangeText={setDescription}
-        />
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.background,
-              color: colors.text,
-              borderColor: colors.border,
-            },
-          ]}
-          placeholder="類別"
-          placeholderTextColor={colors.textSecondary}
-          value={category}
-          onChangeText={setCategory}
-        />
-        <TouchableOpacity
-          style={[
-            styles.dateButton,
-            {
-              backgroundColor: colors.background,
-              borderColor: colors.border,
-            },
-          ]}
-          onPress={() => {
-            setTempDate(date);
-            setShowDatePicker(true);
-          }}
-        >
-          <Text style={{ color: colors.text }}>
-            日期: {date.toLocaleDateString("zh-TW")}
+          <Text style={[
+            styles.balanceAmount, 
+            { color: totalBalance >= 0 ? colors.income : colors.expense }
+          ]}>
+            {formatCurrency(totalBalance)}
           </Text>
-        </TouchableOpacity>
-        <Modal
-          visible={showDatePicker}
-          transparent={true}
-          animationType="slide"
-        >
-          <View style={styles.modalContainer}>
-            <View
-              style={[styles.modalContent, { backgroundColor: colors.card }]}
-            >
-              <DateTimePicker
-                value={tempDate}
-                mode="date"
-                display="spinner"
-                onChange={handleDateChange}
-                style={styles.datePicker}
-                textColor={colors.text}
-              />
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.modalButton,
-                    { backgroundColor: colors.button },
-                  ]}
-                  onPress={handleConfirmDate}
-                >
-                  <Text style={styles.modalButtonText}>確認</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.modalButton,
-                    { backgroundColor: colors.border },
-                  ]}
-                  onPress={handleCancelDate}
-                >
-                  <Text style={styles.modalButtonText}>取消</Text>
-                </TouchableOpacity>
+          
+          <View style={styles.monthlyStats}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                本月收入
+              </Text>
+              <Text style={[styles.statAmount, { color: colors.income }]}>
+                +{formatCurrency(monthlyIncome)}
+              </Text>
               </View>
+            <View style={styles.statItem}>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                本月支出
+              </Text>
+              <Text style={[styles.statAmount, { color: colors.expense }]}>
+                -{formatCurrency(monthlyExpense)}
+              </Text>
             </View>
           </View>
-        </Modal>
-        <View style={styles.typeSelector}>
-          <TouchableOpacity
-            style={[
-              styles.typeButton,
-              { borderColor: colors.border },
-              type === "income" && { backgroundColor: colors.selected },
-            ]}
-            onPress={() => setType("income")}
-          >
-            <Text style={{ color: colors.text }}>收入</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.typeButton,
-              { borderColor: colors.border },
-              type === "expense" && { backgroundColor: colors.selected },
-            ]}
-            onPress={() => setType("expense")}
-          >
-            <Text style={{ color: colors.text }}>支出</Text>
-          </TouchableOpacity>
+        </Card>
+
+        {/* Quick Actions */}
+        <View style={styles.quickActions}>
+          <Button
+            title="新增收入"
+            onPress={() => setShowAddModal(true)}
+            variant="outline"
+            style={[styles.quickActionButton, { borderColor: colors.income }] as any}
+            textStyle={{ color: colors.income }}
+          />
+          <Button
+            title="新增支出"
+            onPress={() => setShowAddModal(true)}
+            style={[styles.quickActionButton, { backgroundColor: colors.expense }] as any}
+          />
         </View>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.button }]}
-          onPress={addTransaction}
-        >
-          <Text style={styles.addButtonText}>新增</Text>
+
+        {/* Expense Chart */}
+        {expenseChartData.length > 0 && (
+          <Card>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              本月支出分析
+            </Text>
+            <PieChart
+              data={expenseChartData}
+              centerText={formatCurrency(monthlyExpense)}
+              centerSubtext="總支出"
+            />
+          </Card>
+        )}
+
+        {/* Recent Transactions */}
+        <Card>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              最近交易
+            </Text>
+            <TouchableOpacity onPress={() => router.push('/transactions')}>
+              <Text style={[styles.seeAllButton, { color: colors.primary }]}>
+                查看全部
+              </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={[styles.transactionList, { backgroundColor: colors.background }]}
-      >
-        <View style={styles.transactionListHeader}>
-          <Text
-            style={[styles.transactionListHeaderText, { color: colors.text }]}
-          >
-            交易記錄
+          {recentTransactions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons 
+                name="receipt-outline" 
+                size={48} 
+                color={colors.textSecondary} 
+              />
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                還沒有任何交易記錄
+              </Text>
+              <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
+                點擊上方按鈕新增您的第一筆交易
           </Text>
         </View>
-        {transactions.map((transaction) => (
+          ) : (
+            <View style={styles.transactionsList}>
+              {recentTransactions.map((transaction) => {
+                const category = categories.find(cat => cat.id === transaction.category_id);
+                return (
           <TransactionItem
             key={transaction.id}
             transaction={transaction}
-            onDelete={deleteTransaction}
-            colors={colors}
-            isOpen={openTransactionId === transaction.id}
-            onSwipeableOpen={(id) => setOpenTransactionId(id)}
-          />
-        ))}
+                    category={category}
+                    onPress={() => handleTransactionPress(transaction)}
+                    onLongPress={() => handleDeleteTransaction(transaction.id)}
+                  />
+                );
+              })}
+            </View>
+          )}
+        </Card>
+
+        <View style={styles.bottomSpacing} />
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        onPress={() => setShowAddModal(true)}
+      >
+        <Ionicons name="add" size={28} color={colors.surface} />
+      </TouchableOpacity>
+
+      {/* Add Transaction Modal */}
+      <AddTransactionModal
+        visible={showAddModal}
+        onClose={closeModal}
+        editTransaction={selectedTransaction}
+      />
+    </View>
   );
 }
 
@@ -422,177 +275,117 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  content: {
+    flex: 1,
+  },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
-  menuButton: {
-    padding: 15,
-  },
-  menuButtonText: {
-    fontSize: 24,
+  greeting: {
+    fontSize: 14,
+    marginBottom: 4,
   },
   title: {
-    padding: 15,
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
-  summary: {
-    padding: 15,
-    marginBottom: 10,
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  summaryText: {
-    fontSize: 16,
-    marginBottom: 5,
+  balanceCard: {
+    margin: 16,
+    alignItems: 'center',
+    paddingVertical: 24,
   },
-  form: {
-    padding: 15,
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 10,
-  },
-  typeSelector: {
-    flexDirection: "row",
-    marginBottom: 10,
-  },
-  typeButton: {
-    flex: 1,
-    padding: 10,
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  addButton: {
-    padding: 15,
-    borderRadius: 5,
-    alignItems: "center",
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  transactionList: {
-    flex: 1,
-  },
-  transactionListHeader: {
-    padding: 15,
-    marginBottom: 10,
-  },
-  transactionListHeaderText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  transactionItem: {
-    padding: 15,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "white",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  transactionLeft: {
-    flex: 1,
-    marginRight: 10,
-  },
-  transactionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 5,
-  },
-  transactionDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  transactionDescription: {
-    fontSize: 16,
-    fontWeight: "bold",
-    flex: 1,
-    marginRight: 10,
-  },
-  transactionCategory: {
+  balanceLabel: {
     fontSize: 14,
+    marginBottom: 8,
   },
-  transactionDate: {
+  balanceAmount: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    marginBottom: 24,
+  },
+  monthlyStats: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statLabel: {
     fontSize: 12,
+    marginBottom: 4,
   },
-  transactionAmount: {
+  statAmount: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: '600',
   },
-  deleteButton: {
-    padding: 8,
-    borderRadius: 5,
-    backgroundColor: "#ffebee",
+  quickActions: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 12,
+    marginBottom: 8,
   },
-  deleteButtonText: {
-    color: "#f44336",
-    fontSize: 14,
-  },
-  dateButton: {
-    borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 10,
-  },
-  modalContainer: {
+  quickActionButton: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
-  modalContent: {
-    width: "90%",
-    padding: 20,
-    borderRadius: 10,
-    alignItems: "center",
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  datePicker: {
-    width: "100%",
-    height: 200,
-    color: "#000000",
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
   },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-    marginTop: 20,
+  seeAllButton: {
+    fontSize: 14,
+    fontWeight: '500',
   },
-  modalButton: {
-    padding: 10,
-    borderRadius: 5,
-    minWidth: 100,
-    alignItems: "center",
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
   },
-  modalButtonText: {
-    color: "white",
+  emptyText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: '500',
+    marginTop: 16,
+    marginBottom: 8,
   },
-  deleteAction: {
-    width: 80,
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#ffebee",
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
   },
-  deleteActionContent: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
+  transactionsList: {
+    gap: 1,
   },
-  deleteActionText: {
-    color: "#f44336",
-    fontSize: 16,
-    fontWeight: "bold",
+  bottomSpacing: {
+    height: 100,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });

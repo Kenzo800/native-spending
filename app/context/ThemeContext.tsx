@@ -1,47 +1,59 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useColorScheme } from "react-native";
-
-type ThemeMode = "light" | "dark" | "system";
+import { ThemeColors, ThemeMode } from '../../types';
 
 interface ThemeContextType {
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
-  colors: {
-    background: string;
-    card: string;
-    text: string;
-    textSecondary: string;
-    border: string;
-    button: string;
-    selected: string;
-    income: string;
-    expense: string;
-  };
+  colors: ThemeColors;
+  isDark: boolean;
 }
+
+const lightColors: ThemeColors = {
+  background: '#f8fafc',
+  surface: '#ffffff',
+  card: '#ffffff',
+  primary: '#3b82f6',
+  secondary: '#6366f1',
+  accent: '#06b6d4',
+  text: '#1e293b',
+  textSecondary: '#64748b',
+  border: '#e2e8f0',
+  success: '#10b981',
+  warning: '#f59e0b',
+  error: '#ef4444',
+  income: '#10b981',
+  expense: '#ef4444',
+  shadow: 'rgba(0, 0, 0, 0.05)',
+};
+
+const darkColors: ThemeColors = {
+  background: '#0f172a',
+  surface: '#1e293b',
+  card: '#1e293b',
+  primary: '#60a5fa',
+  secondary: '#a78bfa',
+  accent: '#67e8f9',
+  text: '#f1f5f9',
+  textSecondary: '#94a3b8',
+  border: '#334155',
+  success: '#34d399',
+  warning: '#fbbf24',
+  error: '#f87171',
+  income: '#34d399',
+  expense: '#f87171',
+  shadow: 'rgba(0, 0, 0, 0.3)',
+};
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemColorScheme = useColorScheme();
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [themeMode, setThemeModeState] = useState<ThemeMode>("system");
 
-  const isDarkMode =
-    themeMode === "system"
-      ? systemColorScheme === "dark"
-      : themeMode === "dark";
-
-  const colors = {
-    background: isDarkMode ? "#1a1a1a" : "#f5f5f5",
-    card: isDarkMode ? "#2d2d2d" : "#ffffff",
-    text: isDarkMode ? "#ffffff" : "#000000",
-    textSecondary: isDarkMode ? "#a0a0a0" : "#666666",
-    border: isDarkMode ? "#404040" : "#dddddd",
-    button: isDarkMode ? "#2196F3" : "#007AFF",
-    selected: isDarkMode ? "#404040" : "#e0e0e0",
-    income: "#4CAF50",
-    expense: "#f44336",
-  };
+  const isDark = themeMode === 'dark' || (themeMode === 'system' && systemColorScheme === 'dark');
+  const colors = isDark ? darkColors : lightColors;
 
   useEffect(() => {
     loadThemeMode();
@@ -50,18 +62,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const loadThemeMode = async () => {
     try {
       const savedThemeMode = await AsyncStorage.getItem("themeMode");
-      if (savedThemeMode) {
-        setThemeMode(savedThemeMode as ThemeMode);
+      if (savedThemeMode && ['light', 'dark', 'system'].includes(savedThemeMode)) {
+        setThemeModeState(savedThemeMode as ThemeMode);
       }
     } catch (error) {
       console.error("無法載入主題設定");
     }
   };
 
-  const handleSetThemeMode = async (mode: ThemeMode) => {
+  const setThemeMode = async (mode: ThemeMode) => {
     try {
       await AsyncStorage.setItem("themeMode", mode);
-      setThemeMode(mode);
+      setThemeModeState(mode);
     } catch (error) {
       console.error("無法儲存主題設定");
     }
@@ -71,8 +83,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     <ThemeContext.Provider
       value={{
         themeMode,
-        setThemeMode: handleSetThemeMode,
+        setThemeMode,
         colors,
+        isDark,
       }}
     >
       {children}
